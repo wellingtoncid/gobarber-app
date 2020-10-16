@@ -49,6 +49,7 @@
         }
       ],
       "no-use-before-define": "off",
+      "camelcase": "off",
       "prettier/prettier": "error"
     },
     "settings": {
