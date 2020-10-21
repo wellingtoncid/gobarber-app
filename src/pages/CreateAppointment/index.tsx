@@ -1,18 +1,19 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import Icon from 'react-native-vector-icons/Feather';
-import { format } from 'date-fns';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
-
-import { useRoute, useNavigation } from '@react-navigation/native';
-import { Alert } from 'react-native';
-import api from '../../services/api';
+import Icon from 'react-native-vector-icons/Feather';
+import { Platform, Alert } from 'react-native';
+import { format } from 'date-fns';
 import { useAuth } from '../../hooks/auth';
+import api from '../../services/api';
+
 import {
   Container,
   Header,
-  BackButton,
+  BackButtton,
   HeaderTitle,
   UserAvatar,
+  Content,
   ProvidersListContainer,
   ProvidersList,
   ProviderContainer,
@@ -20,6 +21,8 @@ import {
   ProviderName,
   Calendar,
   Title,
+  OpenDatePickerButton,
+  OpenDatePickerButtonText,
   Schedule,
   Section,
   SectionTitle,
@@ -30,46 +33,36 @@ import {
   CreateAppointmentButtonText,
 } from './styles';
 
+interface RouteParams {
+  providerId: string;
+}
+
 export interface Provider {
   id: string;
   name: string;
   avatar_url: string;
 }
 
-interface RouteParams {
-  providerId: string;
-}
-
-interface AvailabilityItem {
+export interface AvailabilityItem {
   hour: number;
   available: boolean;
 }
 
-const AppointmentDatePicker: React.FC = () => {
+const CreateAppointment: React.FC = () => {
   const { user } = useAuth();
   const route = useRoute();
-  const navigation = useNavigation();
-  const params = route.params as RouteParams;
+  const routeParams = route.params as RouteParams;
 
-  const [selectedProvider, setSelectedProvider] = useState<string>(
-    params.providerId,
+  const [availability, setAvailability] = useState<AvailabilityItem[]>([]);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedHour, setSelectedHour] = useState(0);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState(
+    routeParams.providerId,
   );
 
-  const minimumDate = useMemo(() => {
-    const today = new Date();
-
-    if (today.getHours() >= 17) {
-      return new Date(today.setDate(today.getDate() + 1));
-    }
-
-    return today;
-  }, []);
-
-  const [selectedDate, setSelectedDate] = useState(minimumDate);
-  const [selectedHour, setSelectedHour] = useState(0);
-
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [availability, setAvailability] = useState<AvailabilityItem[]>([]);
+  const { goBack, navigate } = useNavigation();
 
   useEffect(() => {
     api.get('providers').then(response => {
@@ -79,7 +72,7 @@ const AppointmentDatePicker: React.FC = () => {
 
   useEffect(() => {
     api
-      .get(`/providers/${selectedProvider}/day-availability`, {
+      .get(`providers/${selectedProvider}/day-availability`, {
         params: {
           year: selectedDate.getFullYear(),
           month: selectedDate.getMonth() + 1,
@@ -88,18 +81,40 @@ const AppointmentDatePicker: React.FC = () => {
       })
       .then(response => {
         setAvailability(response.data);
-        setSelectedHour(0);
       });
-  }, [selectedProvider, selectedDate]);
+  }, [selectedDate, selectedProvider]);
+
+  const navigateBack = useCallback(() => {
+    goBack();
+  }, [goBack]);
 
   const handleSelectProvider = useCallback((providerId: string) => {
     setSelectedProvider(providerId);
   }, []);
 
+  const handleToggleDatePicker = useCallback(() => {
+    setShowDatePicker(state => !state);
+  }, []);
+
+  const handleDateChanged = useCallback(
+    (event: any, date: Date | undefined) => {
+      if (Platform.OS === 'android') {
+        setShowDatePicker(false);
+      }
+      if (date) {
+        setSelectedDate(date);
+      }
+    },
+    [],
+  );
+
+  const handleSelectHour = useCallback((hour: number) => {
+    setSelectedHour(hour);
+  }, []);
+
   const handleCreateAppointment = useCallback(async () => {
     try {
       const date = new Date(selectedDate);
-
       date.setHours(selectedHour);
       date.setMinutes(0);
 
@@ -107,55 +122,59 @@ const AppointmentDatePicker: React.FC = () => {
         provider_id: selectedProvider,
         date,
       });
-
-      navigation.navigate('AppointmentCreated', { date: date.getTime() });
+      navigate('AppointmentCreated', { date: date.getTime() });
     } catch (err) {
       Alert.alert(
         'Erro ao criar agendamento',
-        'Ocorreu um erro ao tentar criar o agendamento, tente novamente!',
+        'Ocorreu um erro ao criar o agendamento, tente novamente',
       );
     }
-  }, [selectedProvider, selectedDate, selectedHour, navigation]);
+  }, [navigate, selectedDate, selectedHour, selectedProvider]);
 
   const morningAvailability = useMemo(() => {
     return availability
       .filter(({ hour }) => hour < 12)
-      .map(({ hour, available }) => ({
-        hour,
-        hourFormatted: format(new Date().setHours(hour), 'HH:00'),
-        available,
-      }));
+      .map(({ hour, available }) => {
+        return {
+          hour,
+          available,
+          hourFormatted: format(new Date().setHours(hour), 'HH:00'),
+        };
+      });
   }, [availability]);
 
   const afternoonAvailability = useMemo(() => {
     return availability
       .filter(({ hour }) => hour >= 12)
-      .map(({ hour, available }) => ({
-        hour,
-        hourFormatted: format(new Date().setHours(hour), 'HH:00'),
-        available,
-      }));
+      .map(({ hour, available }) => {
+        return {
+          hour,
+          available,
+          hourFormatted: format(new Date().setHours(hour), 'HH:00'),
+        };
+      });
   }, [availability]);
 
   return (
-    <>
+    <Container>
       <Header>
-        <BackButton onPress={() => navigation.goBack()}>
+        <BackButtton onPress={navigateBack}>
           <Icon name="chevron-left" size={24} color="#999591" />
-        </BackButton>
-        <HeaderTitle>Cabelereiros</HeaderTitle>
-
+        </BackButtton>
+        <HeaderTitle>Cabeleireiros</HeaderTitle>
         <UserAvatar source={{ uri: user.avatar_url }} />
       </Header>
-      <Container>
+      <Content>
         <ProvidersListContainer>
           <ProvidersList
+            horizontal
+            showsHorizontalScrollIndicator={false}
             data={providers}
             keyExtractor={provider => provider.id}
             renderItem={({ item: provider }) => (
               <ProviderContainer
-                selected={provider.id === selectedProvider}
                 onPress={() => handleSelectProvider(provider.id)}
+                selected={provider.id === selectedProvider}
               >
                 <ProviderAvatar source={{ uri: provider.avatar_url }} />
                 <ProviderName selected={provider.id === selectedProvider}>
@@ -165,55 +184,57 @@ const AppointmentDatePicker: React.FC = () => {
             )}
           />
         </ProvidersListContainer>
-
         <Calendar>
           <Title>Escolha a data</Title>
-
-          <DateTimePicker
-            mode="date"
-            is24Hour
-            display="calendar"
-            value={selectedDate}
-            onChange={date => date && setSelectedDate(date)}
-            minimumDate={minimumDate}
-          />
+          <OpenDatePickerButton onPress={handleToggleDatePicker}>
+            <OpenDatePickerButtonText>
+              Selecionar outra data
+            </OpenDatePickerButtonText>
+          </OpenDatePickerButton>
+          {showDatePicker && (
+            <DateTimePicker
+              mode="date"
+              display="calendar"
+              onChange={handleDateChanged}
+              // textColor="#f4ede8"
+              value={selectedDate}
+            />
+          )}
         </Calendar>
 
         <Schedule>
           <Title>Escolha o horário</Title>
-
           <Section>
             <SectionTitle>Manhã</SectionTitle>
-
             <SectionContent>
-              {morningAvailability.map(({ hourFormatted, hour, available }) => (
+              {morningAvailability.map(({ hourFormatted, available, hour }) => (
                 <Hour
+                  enabled={available}
+                  selected={selectedHour === hour}
                   available={available}
-                  selected={hour === selectedHour}
-                  onPress={() => setSelectedHour(hour)}
                   key={hourFormatted}
+                  onPress={() => handleSelectHour(hour)}
                 >
-                  <HourText selected={hour === selectedHour}>
+                  <HourText selected={selectedHour === hour}>
                     {hourFormatted}
                   </HourText>
                 </Hour>
               ))}
             </SectionContent>
           </Section>
-
           <Section>
             <SectionTitle>Tarde</SectionTitle>
-
             <SectionContent>
               {afternoonAvailability.map(
                 ({ hourFormatted, hour, available }) => (
                   <Hour
+                    enabled={available}
+                    selected={selectedHour === hour}
                     available={available}
-                    selected={hour === selectedHour}
-                    onPress={() => setSelectedHour(hour)}
                     key={hourFormatted}
+                    onPress={() => handleSelectHour(hour)}
                   >
-                    <HourText selected={hour === selectedHour}>
+                    <HourText selected={selectedHour === hour}>
                       {hourFormatted}
                     </HourText>
                   </Hour>
@@ -222,12 +243,11 @@ const AppointmentDatePicker: React.FC = () => {
             </SectionContent>
           </Section>
         </Schedule>
-
         <CreateAppointmentButton onPress={handleCreateAppointment}>
           <CreateAppointmentButtonText>Agendar</CreateAppointmentButtonText>
         </CreateAppointmentButton>
-      </Container>
-    </>
+      </Content>
+    </Container>
   );
 };
 
