@@ -1,6 +1,7 @@
 {
     "env": {
-        "es6": true
+        "es6": true,
+        "browser": true
     },
     "extends": [
         "plugin:react/recommended",
@@ -50,6 +51,7 @@
       ],
       "no-use-before-define": "off",
       "camelcase": "off",
+      "import/no-duplicates": "off",
       "prettier/prettier": "error"
     },
     "settings": {
